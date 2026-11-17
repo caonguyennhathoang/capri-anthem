@@ -1,0 +1,10 @@
+[Unit]
+Description=Capri Anthem Discord voice bot
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/capri-anthem
+ExecStart=%h/capri-anthem/.venv/bin/python %h/capri-anthem/bot.py
+TimeoutStopSec=20
+UMask=0077

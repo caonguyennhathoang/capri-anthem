@@ -1,0 +1,18 @@
+#!/bin/bash
+set -euo pipefail
+project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+case "${1:-}" in
+    configure) "$project_dir/.venv/bin/python" "$project_dir/configure.py" ;;
+    start)
+        if [[ ! -s "$HOME/.config/capri-anthem/token" ]]; then
+            echo "Chạy ~/capri-anthem/anthem configure trước để nhập token."
+            exit 1
+        fi
+        systemctl --user start capri-anthem.service
+        echo "Đã gửi lệnh bật. Xem trạng thái bằng ~/capri-anthem/anthem status"
+        ;;
+    stop) systemctl --user stop capri-anthem.service ;;
+    status) systemctl --user status capri-anthem.service --no-pager ;;
+    logs) tail -n 40 "$HOME/.local/state/capri-anthem/bot.log" ;;
+    *) echo "Cách dùng: $0 {configure|start|stop|status|logs}"; exit 1 ;;
+esac

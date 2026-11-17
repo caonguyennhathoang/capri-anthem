@@ -1,0 +1,6 @@
+discord.py[voice]==2.7.1
+# discord.py 2.7.1 needs the pre-0.2 DAVE transition API.
+# https://github.com/Rapptz/discord.py/pull/10548
+davey==0.1.6
+yt-dlp[default]==2026.10.26
+Pillow==13.0.0
