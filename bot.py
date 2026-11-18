@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import dataclass
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -14,6 +15,41 @@ from help_ui import install_help
 
 TOKEN_FILE = Path.home() / ".config/capri-anthem/token"
 logger = logging.getLogger("capri-anthem")
+EMPTY_TIMEOUT = 60
+IDLE_TIMEOUT = 600
+VOICE_CHECK_INTERVAL = 5
+
+
+@dataclass
+class VoiceIdleState:
+    voice: discord.VoiceClient
+    notice_channel: discord.abc.Messageable | None = None
+    channel_id: int | None = None
+    empty_since: float | None = None
+    idle_since: float | None = None
+
+    def check(self, now, player):
+        channel = self.voice.channel
+        if channel.id != self.channel_id:
+            self.channel_id = channel.id
+            self.empty_since = self.idle_since = None
+
+        if any(not member.bot for member in channel.members):
+            self.empty_since = None
+        elif self.empty_since is None:
+            self.empty_since = now
+
+        if (self.voice.is_playing() or self.voice.is_paused()
+                or (player and (player.current is not None or player.pending))):
+            self.idle_since = None
+        elif self.idle_since is None:
+            self.idle_since = now
+
+        if self.empty_since is not None and now - self.empty_since >= EMPTY_TIMEOUT:
+            return "kênh thoại đã không có người trong 1 phút"
+        if self.idle_since is not None and now - self.idle_since >= IDLE_TIMEOUT:
+            return "đã 10 phút không phát nhạc và hàng đợi trống"
+        return None
 
 
 class Anthem(discord.Client):
@@ -26,10 +62,60 @@ class Anthem(discord.Client):
         self.tree = app_commands.CommandTree(self)
         self.synced_guilds = set()
         self.voice_lock = asyncio.Lock()
+        self.voice_idle = {}
+        self.voice_monitor = None
 
     async def setup_hook(self):
         await asyncio.to_thread(self.playlists.initialize)
         await self.levels.start()
+        self.voice_monitor = asyncio.create_task(self.monitor_voice())
+
+    def idle_state(self, voice):
+        state = self.voice_idle.get(voice.guild.id)
+        if state is None or state.voice is not voice:
+            state = self.voice_idle[voice.guild.id] = VoiceIdleState(voice)
+        return state
+
+    async def monitor_voice(self):
+        await self.wait_until_ready()
+        loop = asyncio.get_running_loop()
+        while True:
+            for guild_id, state in list(self.voice_idle.items()):
+                if state.voice.guild.voice_client is not state.voice:
+                    self.voice_idle.pop(guild_id, None)
+            for voice in self.voice_clients:
+                if not voice.is_connected() or voice.channel is None:
+                    continue
+                state = self.idle_state(voice)
+                player = music.players.get(voice.guild.id)
+                if not state.check(loop.time(), player):
+                    continue
+                try:
+                    await self.leave_if_idle(state)
+                except (discord.DiscordException, OSError):
+                    logger.warning("Auto-leave failed in guild %s", voice.guild.id, exc_info=True)
+            await asyncio.sleep(VOICE_CHECK_INTERVAL)
+
+    async def leave_if_idle(self, state):
+        voice = state.voice
+        guild = voice.guild
+        async with self.voice_lock:
+            if guild.voice_client is not voice or not voice.is_connected() or voice.channel is None:
+                return
+            player = music.players.get(guild.id)
+            reason = state.check(asyncio.get_running_loop().time(), player)
+            if not reason:
+                return
+            channel = state.notice_channel or voice.channel
+            await music.stop_guild(guild.id)
+            await voice.disconnect(force=True)
+            self.voice_idle.pop(guild.id, None)
+
+        try:
+            await channel.send(f"Capri Anthem đã tự rời kênh thoại vì {reason}.",
+                               allowed_mentions=discord.AllowedMentions.none())
+        except discord.HTTPException:
+            logger.warning("Could not send auto-leave notice in guild %s", guild.id)
 
     async def sync_guild(self, guild):
         self.tree.copy_global_to(guild=guild)
@@ -57,6 +143,10 @@ class Anthem(discord.Client):
         await music.stop_guild(guild.id)
 
     async def close(self):
+        if self.voice_monitor is not None:
+            self.voice_monitor.cancel()
+            await asyncio.gather(self.voice_monitor, return_exceptions=True)
+            self.voice_monitor = None
         try:
             await self.levels.close()
         finally:
@@ -69,6 +159,9 @@ class Anthem(discord.Client):
         self.levels.refresh(member.guild)
         if self.user and member.id == self.user.id and after.channel is None:
             await music.stop_guild(member.guild.id)
+        voice = member.guild.voice_client
+        if voice is not None and voice.is_connected() and voice.channel is not None:
+            self.idle_state(voice).check(asyncio.get_running_loop().time(), music.players.get(member.guild.id))
 
 
 bot = Anthem()
@@ -88,8 +181,10 @@ async def connect_voice(interaction):
         if voice.channel.id != channel.id:
             await send_music_result(interaction, "Bot đang ở kênh khác. Hãy vào cùng kênh với bot.")
             return None
-        return voice
-    return await channel.connect(timeout=30, self_deaf=True)
+    else:
+        voice = await channel.connect(timeout=30, self_deaf=True)
+    bot.idle_state(voice).notice_channel = interaction.channel
+    return voice
 
 
 music = Music(bot, connect_voice)

@@ -20,6 +20,7 @@ def help_pages():
          "**`/skip`** — Bỏ qua bài đang phát hoặc tải.\n"
          "**`/stop`** — Dừng nhạc và xóa hàng đợi.\n"
          "**`/join` / `/leave`** — Vào / rời kênh thoại của bạn.\n"
+         "Bot tự rời và báo lý do trong chat sau 1 phút kênh không có người, hoặc 10 phút không phát nhạc và hàng đợi trống.\n"
          "Các nút dưới bài đang phát có tạm dừng, bỏ bài, dừng, hàng đợi, lặp bài và lưu vào playlist. "
          "Điều khiển nhạc yêu cầu bạn ở cùng kênh thoại với bot. "
          f"Hàng đợi tối đa {MAX_QUEUE} bài; thanh thời gian cập nhật mỗi 10 giây. Livestream chưa được hỗ trợ."),

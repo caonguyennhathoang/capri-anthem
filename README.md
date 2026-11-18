@@ -21,6 +21,8 @@ Giao diện và lệnh trợ giúp trong Discord dùng tiếng Việt.
 
 Hàng đợi chứa tối đa 100 bài đang chờ. Bot hỗ trợ link video YouTube đơn lẻ. Playlist được quản lý qua các lệnh bên dưới.
 
+Bot tự rời kênh thoại sau 1 phút không có người hoặc sau 10 phút không phát nhạc và hàng đợi trống. Bot gửi lý do vào kênh chat nơi nhận lệnh gọi hoặc phát nhạc gần nhất.
+
 ## Playlist cá nhân và playlist công khai
 
 - **Tạo và thêm bài.** Dùng `/playlist create name:…`, rồi bấm **Lưu vào playlist** dưới bài đang phát. Bạn cũng có thể mở `/playlist info`, chọn playlist của mình và bấm **Thêm bài hát** để dán link mà không cần phát trước.
